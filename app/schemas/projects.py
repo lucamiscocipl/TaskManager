@@ -1,12 +1,15 @@
 from pydantic import BaseModel, ConfigDict
 
-class projectCreate(BaseModel):
+
+class ProjectCreate(BaseModel):
     title: str
     description: str | None = None
     model_config = ConfigDict(from_attributes=True)
 
-class projectUpdate(projectCreate):
+
+class ProjectUpdate(ProjectCreate):
     pass
 
-class projectResponse(projectCreate):
+
+class ProjectResponse(ProjectCreate):
     id: int

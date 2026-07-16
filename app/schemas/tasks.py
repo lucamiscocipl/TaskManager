@@ -1,13 +1,13 @@
 from pydantic import BaseModel, ConfigDict
 
 
-class taskCreate(BaseModel):
+class TaskCreate(BaseModel):
     title: str
     description: str
     status: str = "Not Assigned"
 
 
-class taskResponse(BaseModel):
+class TaskResponse(BaseModel):
     id: int
     title: str
     description: str
