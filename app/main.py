@@ -1,31 +1,31 @@
-import os
 from datetime import datetime, timedelta, timezone
 
 import jwt
 from fastapi import Depends, FastAPI, HTTPException
-from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from jwt import InvalidTokenError
-from pwdlib import PasswordHash
+from fastapi.security import HTTPBearer
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.database import Base, engine, get_db
+from app.dependencies import ALGORITHM, SECRET_KEY, get_current_user
 from app.models.projects import Project
 from app.models.tasks import Task
 from app.models.user import User
+from app.routers.tasks_router import router as tasks_router
 from app.schemas.projects import ProjectCreate, ProjectResponse
 from app.schemas.tasks import TaskCreate, TaskResponse
 from app.schemas.users import TokenResponse, UserCreate, UserLogin, UserResponse
+from app.services.project_service import create_project as create_project_service
+from app.services.user_service import login_user as login_user_service
+from app.services.user_service import register_user as register_user_service
 
 app = FastAPI()
+app.include_router(tasks_router)
 
 bearer_security = HTTPBearer()
 
 Base.metadata.create_all(bind=engine)
-password_hash = PasswordHash.recommended()
 
-SECRET_KEY = os.environ["SECRET_KEY"]
-ALGORITHM = "HS256"
 TOKEN_EXPIRE_MINUTES = 30  # minutes
 
 
@@ -35,32 +35,6 @@ def create_access_token(username: str) -> str:
     token_data = {"sub": username, "exp": expires_at}
 
     return jwt.encode(token_data, SECRET_KEY, algorithm=ALGORITHM)
-
-
-def get_current_user(
-    credentials: HTTPAuthorizationCredentials = Depends(bearer_security),
-    db: Session = Depends(get_db),
-) -> User:
-    authentication_error = HTTPException(
-        status_code=401,
-        detail="Could not validate credentials",
-        headers={"WWW-Authenticate": "Bearer"},
-    )
-    try:
-        payload = jwt.decode(
-            credentials.credentials, SECRET_KEY, algorithms=[ALGORITHM]
-        )
-        username = payload.get("sub")
-        if not isinstance(username, str):
-            raise authentication_error
-    except InvalidTokenError:
-        raise authentication_error
-    statement = select(User).where(User.username == username)
-    user = db.scalar(statement)
-
-    if user is None:
-        raise authentication_error
-    return user
 
 
 @app.get("/")
@@ -77,16 +51,11 @@ def create_project(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    project = Project(
-        title=project_data.title,
-        description=project_data.description,
-        owner_id=current_user.id,
+    return create_project_service(
+        project_data=project_data,
+        db=db,
+        current_user=current_user,
     )
-    db.add(project)
-    db.commit()
-    db.refresh(project)
-
-    return project
 
 
 @app.get("/projects", response_model=list[ProjectResponse])
@@ -106,37 +75,15 @@ def get_project(project_id: int, db: Session = Depends(get_db)):
 
 @app.post("/users/register", response_model=UserResponse)
 def register_user(user_data: UserCreate, db: Session = Depends(get_db)):
-    statement = select(User).where(User.username == user_data.username)
-    existing_user = db.scalar(statement)
-
-    if existing_user is not None:
-        raise HTTPException(status_code=409, detail="This user already exists")
-    user = User(
-        username=user_data.username,
-        hashed_password=password_hash.hash(user_data.password),
-    )
-
-    db.add(user)
-    db.commit()
-    db.refresh(user)
-
-    return user
+    return register_user_service(db=db, user_data=user_data)
 
 
 @app.post("/users/login", response_model=TokenResponse)
 def login_user(login_data: UserLogin, db: Session = Depends(get_db)):
-    statement = select(User).where(User.username == login_data.username)
-    user = db.scalar(statement)
-
-    if user is None:
-        raise HTTPException(status_code=401, detail="Invalid username or password")
-
-    password_check = password_hash.verify(login_data.password, user.hashed_password)
-    if not password_check:
-        raise HTTPException(status_code=401, detail="Invalid username or password")
-
+    user = login_user_service(db=db, login_data=login_data)
     access_token = create_access_token(user.username)
-    return {"access_token": access_token, "token_type": "bearer"}
+
+    return TokenResponse(access_token=access_token, token_type="bearer")
 
 
 # Tasks

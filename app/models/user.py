@@ -14,3 +14,6 @@ class User(Base):
     owned_projects: Mapped[list["Project"]] = relationship(
         back_populates="owner", foreign_keys="Project.owner_id"
     )
+    project_memberships: Mapped[list["ProjectMember"]] = relationship(
+        back_populates="user"
+    )
