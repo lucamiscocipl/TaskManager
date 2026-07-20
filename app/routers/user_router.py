@@ -5,9 +5,12 @@ from fastapi import APIRouter, Depends, status
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.dependencies import ALGORITHM, SECRET_KEY
+from app.dependencies import ALGORITHM, SECRET_KEY, get_current_user
+from app.models.user import User
+from app.schemas.tasks import TaskResponse
 from app.schemas.users import TokenResponse, UserCreate, UserLogin, UserResponse
 from app.services import user_service
+from app.services.task_service import TaskService
 
 router = APIRouter(prefix="/users", tags=["Users"])
 TOKEN_EXPIRE_MINUTES = 30  # minutes
@@ -35,3 +38,11 @@ def login_user(login_data: UserLogin, db: Session = Depends(get_db)):
     access_token = create_access_token(user.username)
 
     return TokenResponse(access_token=access_token, token_type="bearer")
+
+
+@router.get("/me/tasks", response_model=list[TaskResponse])
+def get_current_user_tasks(
+    db: Session = Depends(get_db), current_user: User = Depends(get_current_user)
+):
+    service = TaskService(db)
+    return service.get_user_tasks(user_id=current_user.id)

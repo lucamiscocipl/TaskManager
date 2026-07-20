@@ -20,3 +20,8 @@ def get_tasks_by_project(db: Session, project_id: int) -> list[Task]:
 def get_task_by_project(db: Session, project_id: int, task_id: int) -> Task | None:
     statement = select(Task).where(Task.id == task_id, Task.project_id == project_id)
     return db.scalar(statement)
+
+
+def get_tasks_by_user(db: Session, user_id: int) -> list[Task]:
+    statement = select(Task).where(Task.user_id == user_id).order_by(Task.id)
+    return list(db.scalars(statement).all())

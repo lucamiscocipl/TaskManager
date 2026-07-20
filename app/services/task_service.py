@@ -59,3 +59,6 @@ class TaskService:
                 status_code=404, detail="Task not found in this project"
             )
         return task
+
+    def get_user_tasks(self, user_id: int) -> list[Task]:
+        return task_repository.get_tasks_by_user(self.db, user_id=user_id)

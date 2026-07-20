@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 
 from app.database import Base, engine
+from app.routers.project_member_router import router as project_member_router
 from app.routers.project_router import router as project_router
 from app.routers.tasks_router import router as tasks_router
 from app.routers.user_router import router as user_router
@@ -19,8 +20,10 @@ def read_root():
 app.include_router(project_router)
 
 # Users
-
 app.include_router(user_router)
-# Tasks
 
+# Tasks
 app.include_router(tasks_router)
+
+# Project Members
+app.include_router(project_member_router)
