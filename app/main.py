@@ -1,7 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.exception_handlers import register_exception_handlers
 from app.routers.project_member_router import router as project_member_router
 from app.routers.project_router import router as project_router
 from app.routers.task_comments_router import router as task_comments_router
@@ -10,8 +9,6 @@ from app.routers.tasks_router import router as tasks_router
 from app.routers.user_router import router as user_router
 
 app = FastAPI()
-register_exception_handlers(app)
-
 
 origins = [
     "http://localhost:5500",
