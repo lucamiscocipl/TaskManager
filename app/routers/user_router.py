@@ -9,8 +9,8 @@ from app.dependencies import ALGORITHM, SECRET_KEY, get_current_user
 from app.models.user import User
 from app.schemas.tasks import TaskResponse
 from app.schemas.users import TokenResponse, UserCreate, UserLogin, UserResponse
-from app.services import user_service
 from app.services.task_service import TaskService
+from app.services.user_service import UserService
 
 router = APIRouter(prefix="/users", tags=["Users"])
 TOKEN_EXPIRE_MINUTES = 30  # minutes
@@ -26,7 +26,8 @@ def create_access_token(username: str) -> str:
     "/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED
 )
 def register_user(user_data: UserCreate, db: Session = Depends(get_db)):
-    return user_service.register_user(db=db, user_data=user_data)
+    service = UserService(db)
+    return service.register(user_data)
 
 
 @router.post(
@@ -34,7 +35,8 @@ def register_user(user_data: UserCreate, db: Session = Depends(get_db)):
     response_model=TokenResponse,
 )
 def login_user(login_data: UserLogin, db: Session = Depends(get_db)):
-    user = user_service.login_user(db=db, login_data=login_data)
+    service = UserService(db)
+    user = service.login(login_data)
     access_token = create_access_token(user.username)
 
     return TokenResponse(access_token=access_token, token_type="bearer")

@@ -5,7 +5,7 @@ from app.database import get_db
 from app.dependencies import get_current_user
 from app.models.user import User
 from app.schemas.project_members import ProjectMemberCreate, ProjectMemberResponse
-from app.services import project_member_service
+from app.services.project_member_service import ProjectMemberService
 
 router = APIRouter(prefix="/projects/{project_id}/members", tags=["Project Members"])
 
@@ -19,12 +19,8 @@ def add_project_member(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    return project_member_service.add_project_member(
-        db=db,
-        project_id=project_id,
-        user_id=member_data.user_id,
-        current_user=current_user,
-    )
+    service = ProjectMemberService(db)
+    return service.add(project_id, member_data.user_id, current_user)
 
 
 @router.get("", response_model=list[ProjectMemberResponse])
@@ -33,9 +29,8 @@ def get_project_members(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    return project_member_service.get_project_members(
-        db=db, project_id=project_id, current_user=current_user
-    )
+    service = ProjectMemberService(db)
+    return service.get_all(project_id, current_user)
 
 
 @router.delete("/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -45,6 +40,5 @@ def remove_project_member(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> None:
-    project_member_service.remove_project_member(
-        db=db, project_id=project_id, user_id=user_id, current_user=current_user
-    )
+    service = ProjectMemberService(db)
+    service.remove(project_id, user_id, current_user)

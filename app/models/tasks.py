@@ -16,3 +16,9 @@ class Task(Base):
     user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
     project: Mapped["Project"] = relationship(back_populates="tasks")
     assigned_user: Mapped["User | None"] = relationship(back_populates="tasks")
+    images: Mapped[list["TaskImage"]] = relationship(
+        back_populates="task", cascade="all, delete-orphan"
+    )
+    comments: Mapped[list["TaskComment"]] = relationship(
+        back_populates="task", cascade="all, delete-orphan", passive_deletes=True
+    )

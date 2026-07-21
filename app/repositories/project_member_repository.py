@@ -1,32 +1,46 @@
 from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy.exc import SQLAlchemyError
 
+from app.exceptions import ProjectMemberRepositoryError
 from app.models.project_members import ProjectMember
+from app.repositories.base_repository import BaseRepository
 
 
-def save_project_member(db: Session, project_member: ProjectMember) -> ProjectMember:
-    db.add(project_member)
-    db.commit()
-    db.refresh(project_member)
-    return project_member
+class ProjectMemberRepository(BaseRepository):
+    def save(self, project_member: ProjectMember) -> ProjectMember:
+        try:
+            self.db.add(project_member)
+            self.db.commit()
+            self.db.refresh(project_member)
+        except SQLAlchemyError as error:
+            self.db.rollback()
+            raise ProjectMemberRepositoryError("save") from error
 
+        return project_member
 
-def get_project_member(
-    db: Session, project_id: int, user_id: int
-) -> ProjectMember | None:
-    return db.get(ProjectMember, (project_id, user_id))
+    def get(self, project_id: int, user_id: int) -> ProjectMember | None:
+        try:
+            return self.db.get(ProjectMember, (project_id, user_id))
+        except SQLAlchemyError as error:
+            self.db.rollback()
+            raise ProjectMemberRepositoryError("read") from error
 
+    def get_by_project(self, project_id: int) -> list[ProjectMember]:
+        try:
+            statement = (
+                select(ProjectMember)
+                .where(ProjectMember.project_id == project_id)
+                .order_by(ProjectMember.joined_at, ProjectMember.user_id)
+            )
+            return list(self.db.scalars(statement).all())
+        except SQLAlchemyError as error:
+            self.db.rollback()
+            raise ProjectMemberRepositoryError("list") from error
 
-def get_project_members(db: Session, project_id: int) -> list[ProjectMember]:
-    statement = (
-        select(ProjectMember)
-        .where(ProjectMember.project_id == project_id)
-        .order_by(ProjectMember.joined_at, ProjectMember.user_id)
-    )
-
-    return list(db.scalars(statement).all())
-
-
-def delete_project_member(db: Session, project_member: ProjectMember) -> None:
-    db.delete(project_member)
-    db.commit()
+    def delete(self, project_member: ProjectMember) -> None:
+        try:
+            self.db.delete(project_member)
+            self.db.commit()
+        except SQLAlchemyError as error:
+            self.db.rollback()
+            raise ProjectMemberRepositoryError("delete") from error

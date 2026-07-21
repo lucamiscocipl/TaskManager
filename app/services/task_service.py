@@ -1,16 +1,22 @@
-from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
+from app.exceptions import (
+    ProjectNotFoundError,
+    ProjectOwnerRequiredError,
+    TaskNotFoundError,
+)
 from app.models.tasks import Task
 from app.models.user import User
-from app.repositories import project_repository, task_repository
+from app.repositories.project_repository import ProjectRepository
+from app.repositories.task_repository import TaskRepository
 from app.schemas.tasks import TaskCreate
 
 
 class TaskService:
 
     def __init__(self, db: Session):
-        self.db = db
+        self.projects = ProjectRepository(db)
+        self.tasks = TaskRepository(db)
 
     def create_task(
         self,
@@ -18,15 +24,13 @@ class TaskService:
         task_data: TaskCreate,
         current_user: User,
     ) -> Task:
-        project = project_repository.get_project_by_id(
-            db=self.db, project_id=project_id
-        )
+        project = self.projects.get_by_id(project_id)
 
         if project is None:
-            raise HTTPException(status_code=404, detail="Project not found")
+            raise ProjectNotFoundError()
         if project.owner_id != current_user.id:
-            raise HTTPException(
-                status_code=403, detail="Only the project owner can create tasks"
+            raise ProjectOwnerRequiredError(
+                "Only the project owner can create tasks"
             )
 
         task = Task(
@@ -37,28 +41,22 @@ class TaskService:
             user_id=None,
         )
 
-        return task_repository.save_task(db=self.db, task=task)
+        return self.tasks.save(task)
 
     def get_project_tasks(self, project_id: int) -> list[Task]:
-        project = project_repository.get_project_by_id(
-            db=self.db, project_id=project_id
-        )
+        project = self.projects.get_by_id(project_id)
 
         if project is None:
-            raise HTTPException(status_code=404, detail="Project not found")
+            raise ProjectNotFoundError()
 
-        return task_repository.get_tasks_by_project(db=self.db, project_id=project_id)
+        return self.tasks.get_by_project(project_id)
 
     def get_project_task(self, project_id: int, task_id: int) -> Task:
-        task = task_repository.get_task_by_project(
-            db=self.db, project_id=project_id, task_id=task_id
-        )
+        task = self.tasks.get_one_by_project(project_id, task_id)
 
         if task is None:
-            raise HTTPException(
-                status_code=404, detail="Task not found in this project"
-            )
+            raise TaskNotFoundError()
         return task
 
     def get_user_tasks(self, user_id: int) -> list[Task]:
-        return task_repository.get_tasks_by_user(self.db, user_id=user_id)
+        return self.tasks.get_by_user(user_id)

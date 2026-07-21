@@ -17,3 +17,9 @@ class User(Base):
     project_memberships: Mapped[list["ProjectMember"]] = relationship(
         back_populates="user"
     )
+    task_images: Mapped[list["TaskImage"]] = relationship(
+        back_populates="uploader", passive_deletes=True
+    )
+    task_comments: Mapped[list["TaskComment"]] = relationship(
+        back_populates="author", passive_deletes=True
+    )

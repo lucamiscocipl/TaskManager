@@ -1,38 +1,42 @@
-from fastapi import HTTPException
 from pwdlib import PasswordHash
 from sqlalchemy.orm import Session
 
+from app.exceptions import InvalidCredentialsError, UsernameAlreadyExistsError
 from app.models.user import User
-from app.repositories import user_repository
+from app.repositories.user_repository import UserRepository
 from app.schemas.users import UserCreate, UserLogin
 
 password_hash = PasswordHash.recommended()
 
 
-def register_user(db: Session, user_data: UserCreate) -> User:
-    existing_user = user_repository.get_user_by_username(
-        db=db, username=user_data.username
-    )
+class UserService:
+    def __init__(self, db: Session):
+        self.users = UserRepository(db)
 
-    if existing_user is not None:
-        raise HTTPException(status_code=409, detail="This user already exists")
+    def register(self, user_data: UserCreate) -> User:
+        existing_user = self.users.get_by_username(user_data.username)
 
-    user = User(
-        username=user_data.username,
-        hashed_password=password_hash.hash(user_data.password),
-    )
+        if existing_user is not None:
+            raise UsernameAlreadyExistsError()
 
-    return user_repository.save_user(db=db, user=user)
+        user = User(
+            username=user_data.username,
+            hashed_password=password_hash.hash(user_data.password),
+        )
 
+        return self.users.save(user)
 
-def login_user(db: Session, login_data: UserLogin) -> User:
-    user = user_repository.get_user_by_username(db=db, username=login_data.username)
+    def login(self, login_data: UserLogin) -> User:
+        user = self.users.get_by_username(login_data.username)
 
-    if user is None:
-        raise HTTPException(status_code=401, detail="Invalid username or password")
+        if user is None:
+            raise InvalidCredentialsError()
 
-    password_check = password_hash.verify(login_data.password, user.hashed_password)
-    if not password_check:
-        raise HTTPException(status_code=401, detail="Invalid username or password")
+        password_check = password_hash.verify(
+            login_data.password,
+            user.hashed_password,
+        )
+        if not password_check:
+            raise InvalidCredentialsError()
 
-    return user
+        return user

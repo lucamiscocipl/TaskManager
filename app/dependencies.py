@@ -1,13 +1,14 @@
 import os
 
 import jwt
-from fastapi import Depends, HTTPException
+from fastapi import Depends
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jwt import InvalidTokenError
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.repositories import user_repository
+from app.exceptions import TokenValidationError
+from app.repositories.user_repository import UserRepository
 
 bearer_security = HTTPBearer()
 
@@ -19,22 +20,18 @@ def get_current_user(
     credentials: HTTPAuthorizationCredentials = Depends(bearer_security),
     db: Session = Depends(get_db),
 ):
-    authentication_error = HTTPException(
-        status_code=401,
-        detail="Could not validate credentials",
-        headers={"WWW-Authenticate": "Bearer"},
-    )
     try:
         payload = jwt.decode(
             credentials.credentials, SECRET_KEY, algorithms=[ALGORITHM]
         )
         username = payload.get("sub")
         if not isinstance(username, str):
-            raise authentication_error
-    except InvalidTokenError:
-        raise authentication_error
-    user = user_repository.get_user_by_username(db=db, username=username)
+            raise TokenValidationError()
+    except InvalidTokenError as error:
+        raise TokenValidationError() from error
+    users = UserRepository(db)
+    user = users.get_by_username(username)
 
     if user is None:
-        raise authentication_error
+        raise TokenValidationError()
     return user
