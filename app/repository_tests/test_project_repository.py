@@ -29,3 +29,37 @@ def test_save_rolls_back_on_error():
         repo.save(project)
 
     db.rollback.assert_called_once()
+
+
+def test_get_all_returns_all_projects():
+    db = Mock()
+    projects = [object(), object()]
+    db.scalars.return_value.all.return_value = projects
+
+    repo = ProjectRepository(db)
+    result = repo.get_all()
+
+    assert result == projects
+    db.scalars.assert_called_once()
+
+
+def test_get_all_rolls_back_on_error():
+    db = Mock()
+    db.scalars.side_effect = SQLAlchemyError("db failed")
+    repo = ProjectRepository(db)
+
+    with pytest.raises(ProjectRepositoryError):
+        repo.get_all()
+
+    db.rollback_assert_called_once()
+
+
+def test_get_by_id_returns_project():
+    db = Mock()
+    project = object()
+    db.get.return_value = project
+    repo = ProjectRepository(db)
+    result = repo.get_by_id(1)
+
+    assert result is project
+    db.get.assert_called_once()
