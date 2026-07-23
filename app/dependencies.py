@@ -1,6 +1,8 @@
 import os
+from pathlib import Path
 
 import jwt
+from dotenv import load_dotenv
 from fastapi import Depends
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jwt import InvalidTokenError
@@ -12,7 +14,13 @@ from app.repositories.user_repository import UserRepository
 
 bearer_security = HTTPBearer()
 
-SECRET_KEY = os.environ["SECRET_KEY"]
+ROOT_DIR = Path(__file__).resolve().parent.parent
+load_dotenv(ROOT_DIR / ".env")
+
+SECRET_KEY = os.getenv("SECRET_KEY", "")
+if not SECRET_KEY:
+    raise RuntimeError("SECRET_KEY is not set")
+
 ALGORITHM = "HS256"
 
 
