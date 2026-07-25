@@ -16,11 +16,13 @@ from app.repositories.project_repository import ProjectRepository
 from app.repositories.task_comment_repository import TaskCommentRepository
 from app.repositories.task_repository import TaskRepository
 from app.schemas.task_comments import TaskCommentCreate
+from app.services.notification_service import NotificationService
 
 
 class TaskCommentService:
     def __init__(self, db: Session, current_user: User):
         self.current_user = current_user
+        self.notifications = NotificationService(db)
         self.projects = ProjectRepository(db)
         self.members = ProjectMemberRepository(db)
         self.tasks = TaskRepository(db)
@@ -47,13 +49,31 @@ class TaskCommentService:
     def submit_comment(
         self, project_id: int, task_id: int, comment_data: TaskCommentCreate
     ) -> TaskComment:
-        self.require_task_access(project_id, task_id)
+        project, task = self.require_task_access(project_id, task_id)
         comment = TaskComment(
             task_id=task_id,
             author_id=self.current_user.id,
             content=comment_data.content,
         )
-        return self.comments.save(comment)
+        saved_comment = self.comments.save(comment)
+
+        recipient_ids = {project.owner_id}
+        if task.user_id is not None:
+            recipient_ids.add(task.user_id)
+        recipient_ids.discard(self.current_user.id)
+
+        if recipient_ids:
+            self.notifications.create_for_users(
+                user_ids=recipient_ids,
+                event_type="task_comment",
+                title="New task comment",
+                message=(
+                    f"{self.current_user.username} commented on " f'"{task.title}"'
+                ),
+                resource_url=f"/projects/{project_id}/tasks/{task_id}",
+            )
+
+        return saved_comment
 
     def list_comments(self, project_id: int, task_id: int) -> list[TaskComment]:
         self.require_task_access(project_id, task_id)

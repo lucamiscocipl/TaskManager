@@ -185,6 +185,31 @@
       overflow-wrap: anywhere;
       white-space: pre-wrap;
     }
+    .notification-container {
+      position: fixed;
+      top: 76px;
+      right: 20px;
+      z-index: 100;
+      display: grid;
+      width: min(360px, calc(100vw - 40px));
+      gap: 10px;
+    }
+    .notification-toast {
+      padding: 14px 16px;
+      background: var(--panel-2);
+      border: 1px solid var(--accent);
+      border-radius: var(--radius);
+      box-shadow: 0 12px 30px rgba(0, 0, 0, .3);
+    }
+    .notification-toast strong {
+      display: block;
+      margin-bottom: 4px;
+    }
+    .notification-toast span {
+      color: var(--muted);
+      font-size: 13px;
+      overflow-wrap: anywhere;
+    }
   </style>
 </head>
 <body>
@@ -198,6 +223,12 @@
       <button id="logoutBtn" class="ghost hidden" onclick="logout()">Log out</button>
     </div>
   </header>
+
+  <div
+    id="notificationContainer"
+    class="notification-container"
+    aria-live="polite"
+  ></div>
 
   <div class="container">
     <!-- AUTH -->
@@ -330,6 +361,11 @@
     let currentTask = null;
     let projectTasks = new Map();
     let imageObjectUrls = [];
+    let notificationSocket = null;
+    let notificationReconnectTimer = null;
+    let notificationHeartbeatTimer = null;
+    let notificationReconnectAttempts = 0;
+    let notificationGeneration = 0;
 
     const $ = id => document.getElementById(id);
     const apiBase = () => $('apiBase').value.replace(/\/$/, '');
@@ -358,6 +394,115 @@
         throw new Error(text);
       }
       return data;
+    }
+
+    // ---- Real-time notifications ----
+    function notificationWebSocketUrl() {
+      const url = new URL(apiBase());
+      url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
+      url.pathname = `${url.pathname.replace(/\/$/, '')}/ws/notifications`;
+      url.search = '';
+      url.hash = '';
+      return url.toString();
+    }
+
+    function connectNotifications() {
+      if (!token) return;
+
+      const connectionToken = token;
+      const generation = ++notificationGeneration;
+      clearTimeout(notificationReconnectTimer);
+
+      const socket = new WebSocket(notificationWebSocketUrl());
+      notificationSocket = socket;
+
+      socket.onopen = () => {
+        socket.send(JSON.stringify({
+          type: 'authenticate',
+          token: connectionToken,
+        }));
+      };
+
+      socket.onmessage = event => {
+        let message;
+        try {
+          message = JSON.parse(event.data);
+        } catch {
+          return;
+        }
+
+        if (message.type === 'connection.ready') {
+          notificationReconnectAttempts = 0;
+          clearInterval(notificationHeartbeatTimer);
+          notificationHeartbeatTimer = setInterval(() => {
+            if (socket.readyState === WebSocket.OPEN) {
+              socket.send(JSON.stringify({ type: 'ping' }));
+            }
+          }, 25000);
+          return;
+        }
+
+        if (message.type === 'notification.created') {
+          displayNotification(message.data);
+        }
+      };
+
+      socket.onclose = event => {
+        if (notificationSocket === socket) {
+          notificationSocket = null;
+        }
+        clearInterval(notificationHeartbeatTimer);
+
+        const isCurrentConnection = generation === notificationGeneration;
+        const isCurrentSession = token && token === connectionToken;
+        if (!isCurrentConnection || !isCurrentSession) return;
+
+        if (event.code === 1008) {
+          displayNotification({
+            title: 'Notification connection rejected',
+            message: event.reason || 'Log in again to reconnect.',
+          });
+          return;
+        }
+
+        const delay = Math.min(
+          1000 * 2 ** notificationReconnectAttempts,
+          30000,
+        );
+        notificationReconnectAttempts += 1;
+        notificationReconnectTimer = setTimeout(connectNotifications, delay);
+      };
+
+      socket.onerror = () => {
+        console.error('Notification WebSocket connection failed.');
+      };
+    }
+
+    function disconnectNotifications() {
+      notificationGeneration += 1;
+      notificationReconnectAttempts = 0;
+      clearTimeout(notificationReconnectTimer);
+      clearInterval(notificationHeartbeatTimer);
+
+      if (notificationSocket) {
+        notificationSocket.close(1000, 'User logged out');
+        notificationSocket = null;
+      }
+    }
+
+    function displayNotification(notification) {
+      const toast = document.createElement('div');
+      toast.className = 'notification-toast';
+
+      const title = document.createElement('strong');
+      title.textContent = notification?.title || 'New notification';
+
+      const message = document.createElement('span');
+      message.textContent = notification?.message || '';
+
+      toast.append(title, message);
+      $('notificationContainer').prepend(toast);
+      setTimeout(() => toast.remove(), 8000);
     }
 
     // ---- Auth ----
@@ -391,12 +536,14 @@
       $('whoami').classList.remove('hidden');
       $('logoutBtn').classList.remove('hidden');
       $('whoami').textContent = '👤 ' + username;
+      connectNotifications();
       loadProjects();
       loadMyTasks();
     }
 
     function logout() {
       clearImageObjectUrls();
+      disconnectNotifications();
       token = null; username = null; currentProject = null; currentTask = null;
       projectTasks = new Map();
       $('authView').classList.remove('hidden');

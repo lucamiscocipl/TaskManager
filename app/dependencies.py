@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.exceptions import TokenValidationError
+from app.models.user import User
 from app.repositories.user_repository import UserRepository
 
 bearer_security = HTTPBearer()
@@ -24,22 +25,24 @@ if not SECRET_KEY:
 ALGORITHM = "HS256"
 
 
-def get_current_user(
-    credentials: HTTPAuthorizationCredentials = Depends(bearer_security),
-    db: Session = Depends(get_db),
-):
+def get_user_from_token(token: str, db: Session) -> User:
     try:
-        payload = jwt.decode(
-            credentials.credentials, SECRET_KEY, algorithms=[ALGORITHM]
-        )
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         username = payload.get("sub")
         if not isinstance(username, str):
             raise TokenValidationError()
     except InvalidTokenError as error:
         raise TokenValidationError() from error
-    users = UserRepository(db)
-    user = users.get_by_username(username)
 
+    user = UserRepository(db).get_by_username(username)
     if user is None:
         raise TokenValidationError()
+
     return user
+
+
+def get_current_user(
+    credentials: HTTPAuthorizationCredentials = Depends(bearer_security),
+    db: Session = Depends(get_db),
+):
+    return get_user_from_token(credentials.credentials, db)

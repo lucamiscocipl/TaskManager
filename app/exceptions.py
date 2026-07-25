@@ -133,9 +133,17 @@ class TaskCommentNotFoundError(NotFoundError):
     default_message = "Task comment not found"
 
 
+class NotificationNotFoundError(NotFoundError):
+    default_message = "Notification not found"
+
+
 class TaskCommentDeleteForbiddenError(AuthorizationError):
     default_message = "You cannot delete this comment"
 
 
 class TaskCommentRepositoryError(RepositoryError):
     resource_name = "task comment data"
+
+
+class NotificationRepositoryError(RepositoryError):
+    resource_name = "notification data"

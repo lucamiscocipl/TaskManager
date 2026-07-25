@@ -23,3 +23,6 @@ class User(Base):
     task_comments: Mapped[list["TaskComment"]] = relationship(
         back_populates="author", passive_deletes=True
     )
+    notifications: Mapped[list["Notification"]] = relationship(
+        back_populates="user", cascade="all, delete-orphan", passive_deletes=True
+    )
