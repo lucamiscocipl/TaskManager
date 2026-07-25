@@ -4,7 +4,7 @@ from pydantic import BaseModel, ConfigDict
 class TaskCreate(BaseModel):
     title: str
     description: str
-    status: str = "Not Assigned"
+    user_id: int | None = None
 
 
 class TaskResponse(BaseModel):
@@ -14,5 +14,6 @@ class TaskResponse(BaseModel):
     status: str
     project_id: int
     user_id: int | None
+    assigned_username: str | None
 
     model_config = ConfigDict(from_attributes=True)

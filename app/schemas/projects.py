@@ -13,3 +13,4 @@ class ProjectUpdate(ProjectCreate):
 
 class ProjectResponse(ProjectCreate):
     id: int
+    owner_id: int

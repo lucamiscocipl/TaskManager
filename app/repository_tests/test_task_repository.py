@@ -62,3 +62,38 @@ def test_get_by_user_returns_tasks():
     result = repo.get_by_user(3)
     assert result == tasks
     db.scalars.assert_called_once()
+
+
+def test_claim_updates_unassigned_task_and_commits():
+    db = Mock()
+    task = object()
+    db.scalar.return_value = task
+    repo = TaskRepository(db)
+
+    result = repo.claim(
+        project_id=1,
+        task_id=2,
+        user_id=7,
+        status="Assigned to alice",
+    )
+
+    assert result is task
+    db.commit.assert_called_once()
+    db.refresh.assert_called_once_with(task)
+
+
+def test_claim_returns_none_when_another_member_claimed_first():
+    db = Mock()
+    db.scalar.return_value = None
+    repo = TaskRepository(db)
+
+    result = repo.claim(
+        project_id=1,
+        task_id=2,
+        user_id=7,
+        status="Assigned to alice",
+    )
+
+    assert result is None
+    db.rollback.assert_called_once()
+    db.commit.assert_not_called()

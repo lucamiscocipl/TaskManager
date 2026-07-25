@@ -55,7 +55,7 @@ def test_get_by_tasks_rolls_back_on_error():
     db.rollback.assert_called_once()
 
 
-def test_get_one_Returns_comment():
+def test_get_one_returns_comment():
     db = Mock()
     comment = object()
     db.scalar.return_value = comment

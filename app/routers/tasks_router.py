@@ -44,7 +44,10 @@ def get_project_tasks(
 ):
     service = TaskService(db)
 
-    return service.get_project_tasks(project_id=project_id)
+    return service.get_project_tasks(
+        project_id=project_id,
+        current_user=current_user,
+    )
 
 
 @router.get(
@@ -59,4 +62,26 @@ def get_project_task(
 ):
     service = TaskService(db)
 
-    return service.get_project_task(project_id=project_id, task_id=task_id)
+    return service.get_project_task(
+        project_id=project_id,
+        task_id=task_id,
+        current_user=current_user,
+    )
+
+
+@router.patch(
+    "/{project_id}/tasks/{task_id}/claim",
+    response_model=TaskResponse,
+)
+def claim_task(
+    project_id: int,
+    task_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    service = TaskService(db)
+    return service.claim_task(
+        project_id=project_id,
+        task_id=task_id,
+        current_user=current_user,
+    )

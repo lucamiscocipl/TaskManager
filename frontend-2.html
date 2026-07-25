@@ -287,16 +287,20 @@
 
             <!-- Tasks tab -->
             <div id="tasksPane">
-              <label>Task title</label>
-              <input id="taskTitle">
-              <label>Description</label>
-              <input id="taskDesc">
-              <label>Status</label>
-              <input id="taskStatus" value="Not Assigned">
-              <br><br>
-              <button onclick="createTask()">Add task</button>
-              <div id="taskMsg"></div>
-              <br>
+              <div id="taskCreationPanel">
+                <label>Task title</label>
+                <input id="taskTitle">
+                <label>Description</label>
+                <input id="taskDesc">
+                <label>Assign to</label>
+                <select id="taskAssignee">
+                  <option value="">Leave unassigned</option>
+                </select>
+                <br><br>
+                <button onclick="createTask()">Add task</button>
+                <div id="taskMsg"></div>
+                <br>
+              </div>
               <ul id="taskList" class="list"></ul>
 
               <div id="taskImagesPanel" class="task-images hidden">
@@ -357,6 +361,7 @@
   <script>
     let token = null;
     let username = null;
+    let currentUserId = null;
     let currentProject = null;
     let currentTask = null;
     let projectTasks = new Map();
@@ -525,7 +530,8 @@
           body: { username: $('logUser').value, password: $('logPass').value },
         });
         token = data.access_token;
-        username = $('logUser').value;
+        username = data.username;
+        currentUserId = data.user_id;
         onLoggedIn();
       } catch (e) { msg('logMsg', e.message); }
     }
@@ -544,7 +550,8 @@
     function logout() {
       clearImageObjectUrls();
       disconnectNotifications();
-      token = null; username = null; currentProject = null; currentTask = null;
+      token = null; username = null; currentUserId = null;
+      currentProject = null; currentTask = null;
       projectTasks = new Map();
       $('authView').classList.remove('hidden');
       $('appView').classList.add('hidden');
@@ -555,10 +562,13 @@
     // ---- Projects ----
     async function loadProjects() {
       try {
-        const projects = await api('/projects');
+        const projects = await api('/projects', { auth: true });
         const ul = $('projectList');
         ul.innerHTML = '';
-        if (!projects.length) { ul.innerHTML = '<div class="empty">No projects yet.</div>'; return; }
+        if (!projects.length) {
+          ul.innerHTML = '<div class="empty">You are not a member of any projects yet.</div>';
+          return;
+        }
         projects.forEach(p => {
           const li = document.createElement('li');
           li.className = 'clickable' + (currentProject === p.id ? ' active' : '');
@@ -589,6 +599,10 @@
       closeTaskImages();
       currentProject = p.id;
       $('projDetail').classList.remove('hidden');
+      $('taskCreationPanel').classList.toggle(
+        'hidden',
+        p.owner_id !== currentUserId,
+      );
       $('detailTitle').textContent = `${p.title} (#${p.id})`;
       loadProjects();
       switchTab('tasks');
@@ -615,15 +629,17 @@
     async function createTask() {
       msg('taskMsg', '');
       try {
+        const selectedAssignee = $('taskAssignee').value;
         await api(`/projects/${currentProject}/tasks`, {
           method: 'POST', auth: true,
           body: {
             title: $('taskTitle').value,
             description: $('taskDesc').value,
-            status: $('taskStatus').value || 'Not Assigned',
+            user_id: selectedAssignee ? Number(selectedAssignee) : null,
           },
         });
         $('taskTitle').value = ''; $('taskDesc').value = '';
+        $('taskAssignee').value = '';
         msg('taskMsg', 'Task added.', true);
         loadTasks();
         loadMyTasks();
@@ -643,15 +659,55 @@
       if (!showProject) projectTasks = new Map(tasks.map(task => [task.id, task]));
       tasks.forEach(t => {
         const li = document.createElement('li');
+        const assignment = t.assigned_username
+          ? `Assigned to ${escapeHtml(t.assigned_username)}`
+          : 'Not assigned';
+        const claimButton = t.user_id === null
+          ? `<button onclick="claimTask(event, ${t.project_id}, ${t.id})">Claim task</button>`
+          : '';
         li.innerHTML = `<div>
             <div class="item-title">${escapeHtml(t.title)}</div>
             <div class="item-sub">${escapeHtml(t.description || '')}${showProject ? ' · project #' + t.project_id : ''}</div>
+            <div class="item-sub">${assignment}</div>
           </div><div>
             <span class="badge">${escapeHtml(t.status)}</span>
+            ${claimButton}
             ${showProject ? '' : `<button class="ghost" onclick="openTaskImages(${t.id})">Discussion</button>`}
           </div>`;
         ul.appendChild(li);
       });
+    }
+
+    async function claimTask(event, projectId, taskId) {
+      event.stopPropagation();
+      msg('taskMsg', '');
+
+      if (!Number.isInteger(projectId) || !Number.isInteger(taskId)) {
+        msg('taskMsg', 'Could not identify this task. Refresh the page and try again.');
+        return;
+      }
+
+      try {
+        const claimedTask = await api(
+          `/projects/${projectId}/tasks/${taskId}/claim`,
+          { method: 'PATCH', auth: true },
+        );
+        msg(
+          'taskMsg',
+          `Task assigned to ${claimedTask.assigned_username}.`,
+          true,
+        );
+        const refreshes = [loadMyTasks()];
+        if (currentProject === projectId) {
+          refreshes.push(loadTasks());
+        }
+        await Promise.all(refreshes);
+      } catch (e) {
+        msg('taskMsg', e.message);
+        if (currentProject === projectId) {
+          await loadTasks();
+        }
+      }
     }
 
     // ---- Task images ----
@@ -873,16 +929,40 @@
     }
 
     // ---- Members ----
+    function populateTaskAssignees(members) {
+      const select = $('taskAssignee');
+      const previousValue = select.value;
+      select.innerHTML = '';
+
+      const unassignedOption = document.createElement('option');
+      unassignedOption.value = '';
+      unassignedOption.textContent = 'Leave unassigned';
+      select.appendChild(unassignedOption);
+
+      members.forEach(member => {
+        const option = document.createElement('option');
+        option.value = String(member.user_id);
+        option.textContent = `${member.username} (#${member.user_id})`;
+        select.appendChild(option);
+      });
+
+      if ([...select.options].some(option => option.value === previousValue)) {
+        select.value = previousValue;
+      }
+    }
+
     async function loadMembers() {
       try {
         const members = await api(`/projects/${currentProject}/members`, { auth: true });
+        populateTaskAssignees(members);
         const ul = $('memberList');
         ul.innerHTML = '';
         if (!members.length) { ul.innerHTML = '<div class="empty">No members.</div>'; return; }
         members.forEach(m => {
           const li = document.createElement('li');
           li.innerHTML = `<div>
-              <div class="item-title">User #${m.user_id}</div>
+              <div class="item-title">${escapeHtml(m.username)}</div>
+              <div class="item-sub">User #${m.user_id}</div>
               <div class="item-sub">${m.joined_at ? new Date(m.joined_at).toLocaleString('en-US') : ''}</div>
             </div><button class="danger" onclick="removeMember(${m.user_id})">Remove</button>`;
           ul.appendChild(li);

@@ -54,6 +54,18 @@ def test_get_all_rolls_back_on_error():
     db.rollback_assert_called_once()
 
 
+def test_get_by_user_returns_member_projects():
+    db = Mock()
+    projects = [object(), object()]
+    db.scalars.return_value.all.return_value = projects
+    repo = ProjectRepository(db)
+
+    result = repo.get_by_user(7)
+
+    assert result == projects
+    db.scalars.assert_called_once()
+
+
 def test_get_by_id_returns_project():
     db = Mock()
     project = object()

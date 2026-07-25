@@ -1,6 +1,6 @@
 from sqlalchemy.orm import Session
 
-from app.exceptions import ProjectNotFoundError
+from app.exceptions import ProjectMembershipRequiredError, ProjectNotFoundError
 from app.models.project_members import ProjectMember
 from app.models.projects import Project
 from app.models.user import User
@@ -31,13 +31,17 @@ class ProjectService:
 
         return project
 
-    def get_all(self) -> list[Project]:
-        return self.projects.get_all()
+    def get_all(self, current_user: User) -> list[Project]:
+        return self.projects.get_by_user(current_user.id)
 
-    def get(self, project_id: int) -> Project:
+    def get(self, project_id: int, current_user: User) -> Project:
         project = self.projects.get_by_id(project_id)
 
         if project is None:
             raise ProjectNotFoundError()
+        if self.members.get(project_id, current_user.id) is None:
+            raise ProjectMembershipRequiredError(
+                "Only project members can view this project"
+            )
 
         return project

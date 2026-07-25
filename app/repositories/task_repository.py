@@ -1,4 +1,4 @@
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.exc import SQLAlchemyError
 
 from app.exceptions import TaskRepositoryError
@@ -46,3 +46,36 @@ class TaskRepository(BaseRepository):
         except SQLAlchemyError as error:
             self.db.rollback()
             raise TaskRepositoryError("list") from error
+
+    def claim(
+        self,
+        project_id: int,
+        task_id: int,
+        user_id: int,
+        status: str,
+    ) -> Task | None:
+        try:
+            statement = (
+                update(Task)
+                .where(
+                    Task.id == task_id,
+                    Task.project_id == project_id,
+                    Task.user_id.is_(None),
+                )
+                .values(
+                    user_id=user_id,
+                    status=status,
+                )
+                .returning(Task)
+            )
+            task = self.db.scalar(statement)
+            if task is None:
+                self.db.rollback()
+                return None
+
+            self.db.commit()
+            self.db.refresh(task)
+            return task
+        except SQLAlchemyError as error:
+            self.db.rollback()
+            raise TaskRepositoryError("claim") from error

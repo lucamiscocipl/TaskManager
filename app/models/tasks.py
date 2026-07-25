@@ -22,3 +22,9 @@ class Task(Base):
     comments: Mapped[list["TaskComment"]] = relationship(
         back_populates="task", cascade="all, delete-orphan", passive_deletes=True
     )
+
+    @property
+    def assigned_username(self) -> str | None:
+        if self.assigned_user is None:
+            return None
+        return self.assigned_user.username

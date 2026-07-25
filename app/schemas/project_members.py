@@ -10,4 +10,5 @@ class ProjectMemberCreate(BaseModel):
 
 class ProjectMemberResponse(ProjectMemberCreate):
     project_id: int
+    username: str
     joined_at: datetime | None = None

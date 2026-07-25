@@ -39,7 +39,12 @@ def login_user(login_data: UserLogin, db: Session = Depends(get_db)):
     user = service.login(login_data)
     access_token = create_access_token(user.username)
 
-    return TokenResponse(access_token=access_token, token_type="bearer")
+    return TokenResponse(
+        access_token=access_token,
+        token_type="bearer",
+        user_id=user.id,
+        username=user.username,
+    )
 
 
 @router.get("/me/tasks", response_model=list[TaskResponse])

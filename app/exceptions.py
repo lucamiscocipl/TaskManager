@@ -86,6 +86,10 @@ class ProjectMemberAlreadyExistsError(ConflictError):
     default_message = "User is already a project member"
 
 
+class TaskAlreadyAssignedError(ConflictError):
+    default_message = "Task has already been assigned"
+
+
 class ProjectOwnerRemovalError(RequestValidationError):
     default_message = "The project owner cannot be removed"
 

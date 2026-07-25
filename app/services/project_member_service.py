@@ -34,9 +34,7 @@ class ProjectMemberService:
     @staticmethod
     def require_project_owner(project: Project, current_user: User) -> None:
         if project.owner_id != current_user.id:
-            raise ProjectOwnerRequiredError(
-                "Only the project owner can manage members"
-            )
+            raise ProjectOwnerRequiredError("Only the project owner can manage members")
 
     def add(
         self,

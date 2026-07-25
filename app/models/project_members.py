@@ -23,3 +23,7 @@ class ProjectMember(Base):
 
     project: Mapped["Project"] = relationship(back_populates="members")
     user: Mapped["User"] = relationship(back_populates="project_memberships")
+
+    @property
+    def username(self) -> str:
+        return self.user.username

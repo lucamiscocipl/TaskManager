@@ -1,5 +1,6 @@
 from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.orm import selectinload
 
 from app.exceptions import ProjectMemberRepositoryError
 from app.models.project_members import ProjectMember
@@ -29,6 +30,7 @@ class ProjectMemberRepository(BaseRepository):
         try:
             statement = (
                 select(ProjectMember)
+                .options(selectinload(ProjectMember.user))
                 .where(ProjectMember.project_id == project_id)
                 .order_by(ProjectMember.joined_at, ProjectMember.user_id)
             )

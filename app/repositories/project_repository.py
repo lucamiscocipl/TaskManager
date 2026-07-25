@@ -2,6 +2,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
 
 from app.exceptions import ProjectRepositoryError
+from app.models.project_members import ProjectMember
 from app.models.projects import Project
 from app.repositories.base_repository import BaseRepository
 
@@ -21,6 +22,22 @@ class ProjectRepository(BaseRepository):
     def get_all(self) -> list[Project]:
         try:
             statement = select(Project).order_by(Project.id)
+            return list(self.db.scalars(statement).all())
+        except SQLAlchemyError as error:
+            self.db.rollback()
+            raise ProjectRepositoryError("list") from error
+
+    def get_by_user(self, user_id: int) -> list[Project]:
+        try:
+            statement = (
+                select(Project)
+                .join(
+                    ProjectMember,
+                    ProjectMember.project_id == Project.id,
+                )
+                .where(ProjectMember.user_id == user_id)
+                .order_by(Project.id)
+            )
             return list(self.db.scalars(statement).all())
         except SQLAlchemyError as error:
             self.db.rollback()
