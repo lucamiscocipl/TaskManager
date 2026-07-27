@@ -998,7 +998,6 @@
     function closeTaskImages() {
       clearImageObjectUrls();
       currentTask = null;
-      projectTasks = new Map();
       $('taskImagesPanel').classList.add('hidden');
       $('taskImageList').innerHTML = '';
       $('taskImageFile').value = '';
@@ -1009,6 +1008,12 @@
     }
 
     function openTaskImages(taskId) {
+      const panelIsOpen = !$('taskImagesPanel').classList.contains('hidden');
+      if (currentTask === taskId && panelIsOpen) {
+        closeTaskImages();
+        return;
+      }
+
       const task = projectTasks.get(taskId);
       if (!task) return;
 
