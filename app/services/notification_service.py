@@ -73,3 +73,9 @@ class NotificationService:
             raise NotificationNotFoundError()
 
         return self.notifications.mark_read(notification)
+
+    def count_unread(self, user_id: int) -> int:
+        return self.notifications.count_unread(user_id)
+
+    def mark_all_read(self, user_id: int) -> int:
+        return self.notifications.mark_all_read(user_id)

@@ -9,7 +9,11 @@ from app.dependencies import get_current_user, get_user_from_token
 from app.exceptions import TokenValidationError
 from app.models.user import User
 from app.realtime.connection_manager import notification_connections
-from app.schemas.notifications import NotificationResponse
+from app.schemas.notifications import (
+    NotificationResponse,
+    NotificationsMarkedReadResponse,
+    NotificationUnreadCountResponse,
+)
 from app.services.notification_service import NotificationService
 
 router = APIRouter(tags=["Notifications"])
@@ -40,6 +44,32 @@ def list_notifications(
     return service.list_for_user(
         current_user.id,
         unread_only=unread_only,
+    )
+
+
+@router.get(
+    "/notifications/unread-count",
+    response_model=NotificationUnreadCountResponse,
+)
+def get_unread_notification_count(
+    service: NotificationServiceDep,
+    current_user: User = Depends(get_current_user),
+):
+    return NotificationUnreadCountResponse(
+        unread_count=service.count_unread(current_user.id)
+    )
+
+
+@router.patch(
+    "/notifications/read-all",
+    response_model=NotificationsMarkedReadResponse,
+)
+def mark_all_notifications_read(
+    service: NotificationServiceDep,
+    current_user: User = Depends(get_current_user),
+):
+    return NotificationsMarkedReadResponse(
+        updated_count=service.mark_all_read(current_user.id)
     )
 
 

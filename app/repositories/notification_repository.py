@@ -1,4 +1,4 @@
-from sqlalchemy import select
+from sqlalchemy import func, select, update
 from sqlalchemy.exc import SQLAlchemyError
 
 from app.exceptions import NotificationRepositoryError
@@ -54,12 +54,40 @@ class NotificationRepository(BaseRepository):
             self.db.rollback()
             raise NotificationRepositoryError("read") from error
 
+    def count_unread(self, user_id: int) -> int:
+        try:
+            statement = select(func.count(Notification.id)).where(
+                Notification.user_id == user_id,
+                Notification.is_read.is_(False),
+            )
+            return self.db.scalar(statement) or 0
+        except SQLAlchemyError as error:
+            self.db.rollback()
+            raise NotificationRepositoryError("count") from error
+
     def mark_read(self, notification: Notification) -> Notification:
         try:
             notification.is_read = True
             self.db.commit()
             self.db.refresh(notification)
             return notification
+        except SQLAlchemyError as error:
+            self.db.rollback()
+            raise NotificationRepositoryError("update") from error
+
+    def mark_all_read(self, user_id: int) -> int:
+        try:
+            statement = (
+                update(Notification)
+                .where(
+                    Notification.user_id == user_id,
+                    Notification.is_read.is_(False),
+                )
+                .values(is_read=True)
+            )
+            result = self.db.execute(statement)
+            self.db.commit()
+            return result.rowcount
         except SQLAlchemyError as error:
             self.db.rollback()
             raise NotificationRepositoryError("update") from error

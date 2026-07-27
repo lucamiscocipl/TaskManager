@@ -55,6 +55,17 @@ def test_get_for_user_returns_notification():
     db.scalar.assert_called_once()
 
 
+def test_count_unread_returns_database_count():
+    db = Mock()
+    db.scalar.return_value = 4
+    repository = NotificationRepository(db)
+
+    result = repository.count_unread(7)
+
+    assert result == 4
+    db.scalar.assert_called_once()
+
+
 def test_mark_read_updates_and_commits():
     db = Mock()
     notification = Mock(is_read=False)
@@ -66,3 +77,15 @@ def test_mark_read_updates_and_commits():
     db.commit.assert_called_once()
     db.refresh.assert_called_once_with(notification)
     assert result is notification
+
+
+def test_mark_all_read_returns_updated_count():
+    db = Mock()
+    db.execute.return_value.rowcount = 3
+    repository = NotificationRepository(db)
+
+    result = repository.mark_all_read(7)
+
+    assert result == 3
+    db.execute.assert_called_once()
+    db.commit.assert_called_once()

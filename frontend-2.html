@@ -210,6 +210,100 @@
       font-size: 13px;
       overflow-wrap: anywhere;
     }
+    .notification-menu { position: relative; }
+    .notification-bell {
+      position: relative;
+      min-width: 42px;
+      padding: 8px 11px;
+      background: transparent;
+      border: 1px solid var(--border);
+      font-size: 17px;
+    }
+    .notification-bell:hover { background: var(--panel-2); }
+    .notification-count {
+      position: absolute;
+      top: -7px;
+      right: -7px;
+      min-width: 20px;
+      padding: 1px 5px;
+      background: var(--danger);
+      border: 2px solid var(--panel);
+      border-radius: 20px;
+      color: #fff;
+      font-size: 10px;
+      line-height: 16px;
+      text-align: center;
+    }
+    .notification-panel {
+      position: absolute;
+      top: calc(100% + 10px);
+      right: 0;
+      width: min(390px, calc(100vw - 32px));
+      max-height: min(520px, calc(100vh - 100px));
+      overflow: hidden;
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: 0 18px 45px rgba(0, 0, 0, .4);
+    }
+    .notification-panel-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--border);
+    }
+    .notification-panel-header strong { font-size: 14px; }
+    .notification-panel-header button {
+      padding: 5px 8px;
+      background: transparent;
+      color: var(--accent);
+      font-size: 12px;
+    }
+    .notification-list {
+      max-height: 440px;
+      overflow-y: auto;
+    }
+    .notification-item {
+      display: block;
+      width: 100%;
+      padding: 12px 14px;
+      background: transparent;
+      border: 0;
+      border-bottom: 1px solid var(--border);
+      border-radius: 0;
+      color: var(--text);
+      text-align: left;
+    }
+    .notification-item:hover { background: var(--panel-2); }
+    .notification-item.unread { background: rgba(91, 141, 239, .1); }
+    .notification-item-title {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      font-size: 13px;
+      font-weight: 700;
+    }
+    .notification-item-message {
+      margin-top: 3px;
+      color: var(--muted);
+      font-size: 12px;
+      overflow-wrap: anywhere;
+    }
+    .notification-item-time {
+      margin-top: 5px;
+      color: var(--muted);
+      font-size: 10px;
+    }
+    .unread-dot {
+      width: 8px;
+      height: 8px;
+      flex: 0 0 auto;
+      background: var(--accent);
+      border-radius: 50%;
+    }
   </style>
 </head>
 <body>
@@ -220,6 +314,27 @@
         API: <input id="apiBase" value="http://localhost:8000">
       </div>
       <span id="whoami" class="badge hidden"></span>
+      <div id="notificationMenu" class="notification-menu hidden">
+        <button
+          id="notificationBell"
+          class="notification-bell"
+          onclick="toggleNotificationPanel(event)"
+          aria-label="Notifications"
+          aria-expanded="false"
+        >
+          🔔
+          <span id="notificationCount" class="notification-count hidden">0</span>
+        </button>
+        <div id="notificationPanel" class="notification-panel hidden">
+          <div class="notification-panel-header">
+            <strong>Notifications</strong>
+            <button onclick="markAllNotificationsRead(event)">Mark all read</button>
+          </div>
+          <div id="notificationList" class="notification-list">
+            <div class="empty" style="padding: 14px;">No notifications yet.</div>
+          </div>
+        </div>
+      </div>
       <button id="logoutBtn" class="ghost hidden" onclick="logout()">Log out</button>
     </div>
   </header>
@@ -371,6 +486,8 @@
     let notificationHeartbeatTimer = null;
     let notificationReconnectAttempts = 0;
     let notificationGeneration = 0;
+    let notifications = [];
+    let unreadNotificationCount = 0;
 
     const $ = id => document.getElementById(id);
     const apiBase = () => $('apiBase').value.replace(/\/$/, '');
@@ -438,6 +555,7 @@
 
         if (message.type === 'connection.ready') {
           notificationReconnectAttempts = 0;
+          loadNotifications();
           clearInterval(notificationHeartbeatTimer);
           notificationHeartbeatTimer = setInterval(() => {
             if (socket.readyState === WebSocket.OPEN) {
@@ -448,6 +566,7 @@
         }
 
         if (message.type === 'notification.created') {
+          receiveLiveNotification(message.data);
           displayNotification(message.data);
         }
       };
@@ -492,6 +611,158 @@
       if (notificationSocket) {
         notificationSocket.close(1000, 'User logged out');
         notificationSocket = null;
+      }
+    }
+
+    function receiveLiveNotification(notification) {
+      const existingIndex = notifications.findIndex(
+        item => item.id === notification.id,
+      );
+
+      if (existingIndex >= 0) {
+        const existing = notifications[existingIndex];
+        notifications[existingIndex] = { ...existing, ...notification };
+        if (existing.is_read && !notification.is_read) {
+          unreadNotificationCount += 1;
+        }
+      } else {
+        notifications.unshift(notification);
+        if (!notification.is_read) {
+          unreadNotificationCount += 1;
+        }
+      }
+
+      sortNotifications();
+      renderNotificationInbox();
+    }
+
+    function sortNotifications() {
+      notifications.sort((a, b) => {
+        const dateDifference = new Date(b.created_at) - new Date(a.created_at);
+        return dateDifference || b.id - a.id;
+      });
+      notifications = notifications.slice(0, 100);
+    }
+
+    async function loadNotifications() {
+      if (!token) return;
+
+      try {
+        const [storedNotifications, countData] = await Promise.all([
+          api('/notifications', { auth: true }),
+          api('/notifications/unread-count', { auth: true }),
+        ]);
+
+        const merged = new Map(
+          storedNotifications.map(notification => [notification.id, notification]),
+        );
+        notifications.forEach(notification => {
+          if (!merged.has(notification.id)) {
+            merged.set(notification.id, notification);
+          }
+        });
+
+        notifications = [...merged.values()];
+        sortNotifications();
+        unreadNotificationCount = Math.max(
+          countData.unread_count,
+          notifications.filter(notification => !notification.is_read).length,
+        );
+        renderNotificationInbox();
+      } catch (error) {
+        console.error('Could not load notifications:', error);
+      }
+    }
+
+    function renderNotificationInbox() {
+      const count = $('notificationCount');
+      count.textContent = unreadNotificationCount > 99
+        ? '99+'
+        : String(unreadNotificationCount);
+      count.classList.toggle('hidden', unreadNotificationCount === 0);
+
+      const list = $('notificationList');
+      list.innerHTML = '';
+      if (!notifications.length) {
+        list.innerHTML = '<div class="empty" style="padding: 14px;">No notifications yet.</div>';
+        return;
+      }
+
+      notifications.forEach(notification => {
+        const item = document.createElement('button');
+        item.className = `notification-item${notification.is_read ? '' : ' unread'}`;
+        item.onclick = () => markNotificationRead(notification.id);
+
+        const titleRow = document.createElement('div');
+        titleRow.className = 'notification-item-title';
+
+        const title = document.createElement('span');
+        title.textContent = notification.title;
+        titleRow.appendChild(title);
+
+        if (!notification.is_read) {
+          const dot = document.createElement('span');
+          dot.className = 'unread-dot';
+          titleRow.appendChild(dot);
+        }
+
+        const message = document.createElement('div');
+        message.className = 'notification-item-message';
+        message.textContent = notification.message;
+
+        const time = document.createElement('div');
+        time.className = 'notification-item-time';
+        time.textContent = new Date(notification.created_at).toLocaleString();
+
+        item.append(titleRow, message, time);
+        list.appendChild(item);
+      });
+    }
+
+    async function markNotificationRead(notificationId) {
+      const notification = notifications.find(item => item.id === notificationId);
+      if (!notification || notification.is_read) return;
+
+      try {
+        const updated = await api(
+          `/notifications/${notificationId}/read`,
+          { method: 'PATCH', auth: true },
+        );
+        Object.assign(notification, updated);
+        unreadNotificationCount = Math.max(0, unreadNotificationCount - 1);
+        renderNotificationInbox();
+      } catch (error) {
+        console.error('Could not mark notification as read:', error);
+      }
+    }
+
+    async function markAllNotificationsRead(event) {
+      event.stopPropagation();
+      if (unreadNotificationCount === 0) return;
+
+      try {
+        await api('/notifications/read-all', {
+          method: 'PATCH',
+          auth: true,
+        });
+        notifications.forEach(notification => {
+          notification.is_read = true;
+        });
+        unreadNotificationCount = 0;
+        renderNotificationInbox();
+      } catch (error) {
+        console.error('Could not mark notifications as read:', error);
+      }
+    }
+
+    function toggleNotificationPanel(event) {
+      event.stopPropagation();
+      const panel = $('notificationPanel');
+      const willOpen = panel.classList.contains('hidden');
+      panel.classList.toggle('hidden', !willOpen);
+      $('notificationBell').setAttribute('aria-expanded', String(willOpen));
+      if (willOpen) {
+        loadNotifications();
       }
     }
 
@@ -540,9 +811,11 @@
       $('authView').classList.add('hidden');
       $('appView').classList.remove('hidden');
       $('whoami').classList.remove('hidden');
+      $('notificationMenu').classList.remove('hidden');
       $('logoutBtn').classList.remove('hidden');
       $('whoami').textContent = '👤 ' + username;
       connectNotifications();
+      loadNotifications();
       loadProjects();
       loadMyTasks();
     }
@@ -553,9 +826,15 @@
       token = null; username = null; currentUserId = null;
       currentProject = null; currentTask = null;
       projectTasks = new Map();
+      notifications = [];
+      unreadNotificationCount = 0;
+      renderNotificationInbox();
+      $('notificationPanel').classList.add('hidden');
+      $('notificationBell').setAttribute('aria-expanded', 'false');
       $('authView').classList.remove('hidden');
       $('appView').classList.add('hidden');
       $('whoami').classList.add('hidden');
+      $('notificationMenu').classList.add('hidden');
       $('logoutBtn').classList.add('hidden');
     }
 
@@ -994,6 +1273,13 @@
       return String(s).replace(/[&<>"']/g, c =>
         ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
     }
+
+    document.addEventListener('click', event => {
+      if (!$('notificationMenu').contains(event.target)) {
+        $('notificationPanel').classList.add('hidden');
+        $('notificationBell').setAttribute('aria-expanded', 'false');
+      }
+    });
   </script>
 </body>
 </html>
